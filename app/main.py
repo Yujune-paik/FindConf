@@ -14,12 +14,27 @@ from app.xlab import XLAB_KEYWORDS
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 app = FastAPI(title="FindConf")
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+# 静的ファイル配信（Vercel環境でもローカルでも動くように）
+_static_dir = BASE_DIR / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
 class RecommendRequest(BaseModel):
     abstract: str
+
+
+@app.get("/css/style.css")
+async def serve_css():
+    """Vercel環境でも確実にCSSを配信するためのフォールバック。"""
+    css_path = BASE_DIR / "static" / "style.css"
+    if css_path.exists():
+        from fastapi.responses import Response
+        return Response(content=css_path.read_text(), media_type="text/css")
+    return Response(content="", media_type="text/css")
 
 
 @app.get("/", response_class=HTMLResponse)
