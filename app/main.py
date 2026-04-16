@@ -150,10 +150,48 @@ async def xlab_recommend(body: RecommendRequest):
 
 @app.get("/api/health")
 async def health():
+    import traceback
+    template_files = []
+    try:
+        template_dir = BASE_DIR / "templates"
+        if template_dir.is_dir():
+            template_files = [f.name for f in template_dir.iterdir()]
+    except Exception:
+        pass
+
+    # テンプレートレンダリングテスト
+    render_error = None
+    try:
+        from starlette.testclient import TestClient
+    except Exception:
+        pass
+
+    try:
+        templates.get_template("index.html")
+    except Exception as e:
+        render_error = f"{type(e).__name__}: {e}"
+
     return {
         "status": "ok",
         "base_dir": str(BASE_DIR),
         "templates_exist": (BASE_DIR / "templates").is_dir(),
         "static_exist": (BASE_DIR / "static").is_dir(),
+        "template_files": template_files,
+        "render_error": render_error,
         "cwd": os.getcwd(),
     }
+
+
+@app.get("/api/debug-render")
+async def debug_render(request: Request):
+    """テンプレートレンダリングのデバッグ。"""
+    import traceback
+    try:
+        html = templates.TemplateResponse("index.html", {"request": request})
+        return {"status": "ok", "type": str(type(html))}
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
