@@ -1,7 +1,8 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from httpx import HTTPStatusError
@@ -11,16 +12,52 @@ from app.openalex import search_similar_works
 from app.ranking import rank_venues, rank_venues_xlab
 from app.xlab import XLAB_KEYWORDS
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+
+def _find_project_root() -> Path:
+    """プロジェクトルートを探す。Vercel/ローカル両対応。"""
+    # 方法1: __file__ から辿る（ローカル）
+    candidate = Path(__file__).resolve().parent.parent
+    if (candidate / "templates").is_dir():
+        return candidate
+
+    # 方法2: カレントディレクトリ（Vercel）
+    candidate = Path(os.getcwd())
+    if (candidate / "templates").is_dir():
+        return candidate
+
+    # 方法3: LAMBDA_TASK_ROOT（Vercel serverless）
+    task_root = os.environ.get("LAMBDA_TASK_ROOT", "")
+    if task_root:
+        candidate = Path(task_root)
+        if (candidate / "templates").is_dir():
+            return candidate
+
+    # フォールバック
+    return Path(__file__).resolve().parent.parent
+
+
+BASE_DIR = _find_project_root()
 
 app = FastAPI(title="FindConf")
 
-# 静的ファイル配信（Vercel環境でもローカルでも動くように）
+# 静的ファイル配信
 _static_dir = BASE_DIR / "static"
 if _static_dir.is_dir():
-    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+# --- CSSを読み込んでキャッシュ ---
+_css_cache: str | None = None
+
+
+def _load_css() -> str:
+    global _css_cache
+    if _css_cache is None:
+        css_path = BASE_DIR / "static" / "style.css"
+        _css_cache = css_path.read_text() if css_path.exists() else ""
+    return _css_cache
 
 
 class RecommendRequest(BaseModel):
@@ -29,12 +66,7 @@ class RecommendRequest(BaseModel):
 
 @app.get("/css/style.css")
 async def serve_css():
-    """Vercel環境でも確実にCSSを配信するためのフォールバック。"""
-    css_path = BASE_DIR / "static" / "style.css"
-    if css_path.exists():
-        from fastapi.responses import Response
-        return Response(content=css_path.read_text(), media_type="text/css")
-    return Response(content="", media_type="text/css")
+    return Response(content=_load_css(), media_type="text/css")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -88,12 +120,10 @@ async def xlab_recommend(body: RecommendRequest):
         works = await search_similar_works(abstract)
 
         # 補助検索: xlabキーワードで追加の関連論文を取得
-        # abstractの先頭数語 + xlabキーワードで検索し、マージ
         abstract_words = abstract.split()[:10]
         abstract_prefix = " ".join(abstract_words)
         seen_ids = {w.get("id") for w in works}
 
-        # 最も関連性の高いxlabキーワード2つで追加検索
         for kw in XLAB_KEYWORDS[:2]:
             query = f"{abstract_prefix} {kw}"
             extra_works = await search_similar_works(query)
@@ -112,4 +142,18 @@ async def xlab_recommend(body: RecommendRequest):
     return {
         "total_works": len(works),
         "venues": venues,
+    }
+
+
+# --- Vercelデバッグ用 (問題解決後削除可) ---
+
+
+@app.get("/api/health")
+async def health():
+    return {
+        "status": "ok",
+        "base_dir": str(BASE_DIR),
+        "templates_exist": (BASE_DIR / "templates").is_dir(),
+        "static_exist": (BASE_DIR / "static").is_dir(),
+        "cwd": os.getcwd(),
     }
