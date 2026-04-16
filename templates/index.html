@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FindConf — 投稿先を探す</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="container">
+    <header>
+        <h1>FindConf</h1>
+        <p>Abstractを入力して、投稿先の学会・ジャーナルを探しましょう。</p>
+    </header>
+
+    <section id="search-section">
+        <form id="search-form">
+            <label for="abstract-input">Abstract</label>
+            <textarea id="abstract-input" name="abstract" rows="8"
+                      placeholder="ここにabstractを貼り付けてください…"></textarea>
+            <button type="submit" id="submit-btn">学会・ジャーナルを探す</button>
+        </form>
+    </section>
+
+    <section id="loading" class="hidden" aria-busy="true">
+        <p>類似論文を検索しています…</p>
+    </section>
+
+    <section id="error" class="hidden">
+        <article class="error-card">
+            <p id="error-message"></p>
+        </article>
+    </section>
+
+    <section id="results" class="hidden">
+        <h2 id="results-summary"></h2>
+        <div id="venue-list"></div>
+    </section>
+</main>
+
+<script>
+const form = document.getElementById('search-form');
+const loading = document.getElementById('loading');
+const results = document.getElementById('results');
+const errorSection = document.getElementById('error');
+const errorMessage = document.getElementById('error-message');
+const submitBtn = document.getElementById('submit-btn');
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const abstract = document.getElementById('abstract-input').value.trim();
+    if (!abstract) return;
+
+    loading.classList.remove('hidden');
+    results.classList.add('hidden');
+    errorSection.classList.add('hidden');
+    submitBtn.disabled = true;
+
+    try {
+        const resp = await fetch('/api/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ abstract }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            throw new Error(data.error || 'エラーが発生しました');
+        }
+
+        renderResults(data);
+    } catch (err) {
+        errorMessage.textContent = err.message;
+        errorSection.classList.remove('hidden');
+    } finally {
+        loading.classList.add('hidden');
+        submitBtn.disabled = false;
+    }
+});
+
+function renderResults(data) {
+    const summary = document.getElementById('results-summary');
+    const list = document.getElementById('venue-list');
+
+    if (data.venues.length === 0) {
+        summary.textContent = '該当する学会・ジャーナルが見つかりませんでした。';
+        list.innerHTML = '';
+        results.classList.remove('hidden');
+        return;
+    }
+
+    summary.textContent = `${data.total_works}件の類似論文から${data.venues.length}件の投稿先を発見`;
+    list.innerHTML = '';
+
+    const maxFreq = Math.max(...data.venues.map(v => v.frequency));
+
+    data.venues.forEach((venue, i) => {
+        const card = document.createElement('article');
+        card.className = 'venue-card';
+
+        const typeBadge = venue.type
+            ? `<span class="badge badge-${venue.type}">${venue.type}</span>`
+            : '';
+        const oaBadge = venue.is_oa
+            ? '<span class="badge badge-oa">Open Access</span>'
+            : '';
+
+        const barWidth = Math.round((venue.frequency / maxFreq) * 100);
+
+        const papers = venue.sample_papers.map(p => {
+            const link = p.doi
+                ? `<a href="${p.doi}" target="_blank" rel="noopener">${p.title || 'Untitled'}</a>`
+                : `<span>${p.title || 'Untitled'}</span>`;
+            return `<li>${link} (${p.publication_year || '?'}, cited: ${p.cited_by_count})</li>`;
+        }).join('');
+
+        card.innerHTML = `
+            <header>
+                <strong class="venue-rank">#${i + 1}</strong>
+                <h3 class="venue-name">${venue.name}</h3>
+                <div class="badges">${typeBadge}${oaBadge}</div>
+            </header>
+            <div class="venue-stats">
+                <div class="freq-bar-container">
+                    <div class="freq-bar" style="width: ${barWidth}%"></div>
+                    <span class="freq-label">${data.total_works}件中${venue.frequency}件</span>
+                </div>
+                <p>平均被引用数: <strong>${venue.avg_cited_by}</strong></p>
+            </div>
+            <details>
+                <summary>類似論文サンプル (${venue.sample_papers.length}件)</summary>
+                <ul class="sample-papers">${papers}</ul>
+            </details>
+        `;
+        list.appendChild(card);
+    });
+
+    results.classList.remove('hidden');
+}
+</script>
+</body>
+</html>

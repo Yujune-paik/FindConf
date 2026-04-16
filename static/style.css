@@ -1,0 +1,104 @@
+.hidden {
+    display: none;
+}
+
+header h1 {
+    margin-bottom: 0.25rem;
+}
+
+header p {
+    color: var(--pico-muted-color);
+}
+
+.venue-card {
+    margin-bottom: 1rem;
+}
+
+.venue-card header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.5rem;
+}
+
+.venue-rank {
+    font-size: 1.25rem;
+    color: var(--pico-muted-color);
+    min-width: 2.5rem;
+}
+
+.venue-name {
+    margin: 0;
+    font-size: 1.1rem;
+    flex: 1;
+}
+
+.badges {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-journal {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.badge-conference {
+    background: #fce7f3;
+    color: #9d174d;
+}
+
+.badge-oa {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.freq-bar-container {
+    position: relative;
+    background: var(--pico-secondary-background);
+    border-radius: 0.25rem;
+    height: 1.75rem;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+}
+
+.freq-bar {
+    height: 100%;
+    background: var(--pico-primary);
+    opacity: 0.3;
+    border-radius: 0.25rem;
+    transition: width 0.3s ease;
+}
+
+.freq-label {
+    position: absolute;
+    top: 50%;
+    left: 0.75rem;
+    transform: translateY(-50%);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.sample-papers {
+    font-size: 0.9rem;
+}
+
+.sample-papers li {
+    margin-bottom: 0.3rem;
+}
+
+.error-card {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    color: #991b1b;
+}

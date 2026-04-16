@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FindConf for xlab</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        :root {
+            --xlab-primary: #1a1a2e;
+            --xlab-accent: #e94560;
+            --xlab-secondary: #0f3460;
+            --xlab-light: #f5f5f7;
+        }
+        body { background: var(--xlab-light); }
+        .xlab-header {
+            background: var(--xlab-primary);
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 2rem;
+        }
+        .xlab-header .container { display: flex; align-items: center; gap: 1rem; }
+        .xlab-header h1 { color: white; margin: 0; font-size: 1.5rem; }
+        .xlab-header h1 span { color: var(--xlab-accent); }
+        .xlab-header p { color: #aaa; margin: 0; font-size: 0.85rem; }
+        .xlab-subtitle {
+            color: var(--xlab-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+        .xlab-subtitle strong { color: var(--xlab-accent); }
+
+        /* Tier badges */
+        .badge-tier-top { background: var(--xlab-accent); color: white; }
+        .badge-tier-a { background: #f59e0b; color: white; }
+        .badge-tier-b { background: #6b7280; color: white; }
+        .badge-xlab { background: var(--xlab-secondary); color: white; }
+        .badge-category {
+            background: transparent;
+            border: 1px solid #6b7280;
+            color: #6b7280;
+        }
+        .badge-deadline {
+            background: #fef3c7;
+            color: #92400e;
+            font-weight: 600;
+        }
+
+        .venue-card.xlab-matched {
+            border-left: 4px solid var(--xlab-accent);
+        }
+        .xlab-note {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 0.3rem;
+            font-style: italic;
+        }
+        .section-divider {
+            margin: 2rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--xlab-primary);
+            color: var(--xlab-primary);
+            font-size: 1.1rem;
+        }
+        .keyword-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 1rem;
+        }
+        .keyword-chip {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            background: #e8eaf6;
+            color: var(--xlab-secondary);
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .keyword-chip:hover { background: #c5cae9; }
+    </style>
+</head>
+<body>
+<header class="xlab-header">
+    <div class="container">
+        <div>
+            <h1>FindConf for <span>xlab</span></h1>
+            <p>Yasuaki Kakehi Laboratory, UTokyo III</p>
+        </div>
+    </div>
+</header>
+
+<main class="container">
+    <p class="xlab-subtitle">
+        Abstractを入力すると、<strong>Material Experience Design</strong> に関連する
+        学会・ジャーナルを優先的に提案します。<br>
+        shape-changing interfaces / soft sensors / fabrication / interactive art / tangible interaction
+    </p>
+
+    <section id="search-section">
+        <div class="keyword-chips">
+            <span class="keyword-chip" data-kw="shape-changing interface fabrication">shape-changing</span>
+            <span class="keyword-chip" data-kw="soft sensor conductive 3D printing">soft sensor</span>
+            <span class="keyword-chip" data-kw="tangible interaction physical interface">tangible</span>
+            <span class="keyword-chip" data-kw="pneumatic inflatable actuator">pneumatic</span>
+            <span class="keyword-chip" data-kw="interactive art kinetic installation">interactive art</span>
+            <span class="keyword-chip" data-kw="computational fabrication laser cutting">fabrication</span>
+            <span class="keyword-chip" data-kw="biosignal plant interaction">biosignal</span>
+            <span class="keyword-chip" data-kw="haptic feedback texture material">haptics</span>
+        </div>
+        <form id="search-form">
+            <label for="abstract-input">Abstract</label>
+            <textarea id="abstract-input" name="abstract" rows="8"
+                      placeholder="ここにabstractを貼り付けてください。キーワードチップをクリックして追加することもできます。"></textarea>
+            <button type="submit" id="submit-btn">学会・ジャーナルを探す</button>
+        </form>
+    </section>
+
+    <section id="loading" class="hidden" aria-busy="true">
+        <p>類似論文を検索しています（xlabフィルタ適用中）…</p>
+    </section>
+
+    <section id="error" class="hidden">
+        <article class="error-card">
+            <p id="error-message"></p>
+        </article>
+    </section>
+
+    <section id="results" class="hidden">
+        <h2 id="results-summary"></h2>
+
+        <div id="xlab-venues">
+            <h3 class="section-divider">xlab推奨の投稿先</h3>
+            <div id="xlab-venue-list"></div>
+        </div>
+
+        <div id="other-venues">
+            <h3 class="section-divider">その他の投稿先候補</h3>
+            <div id="other-venue-list"></div>
+        </div>
+    </section>
+</main>
+
+<script>
+// キーワードチップ
+document.querySelectorAll('.keyword-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+        const textarea = document.getElementById('abstract-input');
+        const kw = chip.dataset.kw;
+        if (textarea.value) {
+            textarea.value += ' ' + kw;
+        } else {
+            textarea.value = kw;
+        }
+    });
+});
+
+const form = document.getElementById('search-form');
+const loading = document.getElementById('loading');
+const results = document.getElementById('results');
+const errorSection = document.getElementById('error');
+const errorMessage = document.getElementById('error-message');
+const submitBtn = document.getElementById('submit-btn');
+
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const abstract = document.getElementById('abstract-input').value.trim();
+    if (!abstract) return;
+
+    loading.classList.remove('hidden');
+    results.classList.add('hidden');
+    errorSection.classList.add('hidden');
+    submitBtn.disabled = true;
+
+    try {
+        const resp = await fetch('/api/xlab/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ abstract }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            throw new Error(data.error || 'エラーが発生しました');
+        }
+
+        renderResults(data);
+    } catch (err) {
+        errorMessage.textContent = err.message;
+        errorSection.classList.remove('hidden');
+    } finally {
+        loading.classList.add('hidden');
+        submitBtn.disabled = false;
+    }
+});
+
+const MONTH_NAMES = ['', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+
+function renderVenueCard(venue, index) {
+    const card = document.createElement('article');
+    const isXlab = !!venue.xlab;
+    card.className = 'venue-card' + (isXlab ? ' xlab-matched' : '');
+
+    const typeBadge = venue.type
+        ? `<span class="badge badge-${venue.type}">${venue.type}</span>`
+        : '';
+    const oaBadge = venue.is_oa
+        ? '<span class="badge badge-oa">Open Access</span>'
+        : '';
+
+    let xlabBadges = '';
+    if (isXlab) {
+        const x = venue.xlab;
+        const tierClass = x.tier === 'top' ? 'tier-top' : x.tier === 'A' ? 'tier-a' : 'tier-b';
+        xlabBadges += `<span class="badge badge-xlab">${x.short}</span>`;
+        xlabBadges += `<span class="badge badge-${tierClass}">${x.tier}</span>`;
+        xlabBadges += `<span class="badge badge-category">${x.category}</span>`;
+        if (x.deadline_month) {
+            xlabBadges += `<span class="badge badge-deadline">締切: ${MONTH_NAMES[x.deadline_month]}</span>`;
+        }
+    }
+
+    const maxFreq = 10; // normalize against reasonable max
+    const barWidth = Math.min(100, Math.round((venue.frequency / maxFreq) * 100));
+
+    const papers = venue.sample_papers.map(p => {
+        const link = p.doi
+            ? `<a href="${p.doi}" target="_blank" rel="noopener">${p.title || 'Untitled'}</a>`
+            : `<span>${p.title || 'Untitled'}</span>`;
+        return `<li>${link} (${p.publication_year || '?'}, cited: ${p.cited_by_count})</li>`;
+    }).join('');
+
+    const xlabNote = isXlab ? `<p class="xlab-note">${venue.xlab.note}</p>` : '';
+
+    card.innerHTML = `
+        <header>
+            <strong class="venue-rank">#${index + 1}</strong>
+            <h3 class="venue-name">${isXlab ? venue.xlab.short : venue.name}</h3>
+            <div class="badges">${xlabBadges}${typeBadge}${oaBadge}</div>
+        </header>
+        ${isXlab ? `<p style="font-size:0.85rem;color:#888;margin:-0.5rem 0 0.5rem 3.25rem;">${venue.name}</p>` : ''}
+        ${xlabNote ? `<div style="margin-left:3.25rem;">${xlabNote}</div>` : ''}
+        <div class="venue-stats">
+            <div class="freq-bar-container">
+                <div class="freq-bar" style="width: ${barWidth}%"></div>
+                <span class="freq-label">${venue.frequency}件の類似論文</span>
+            </div>
+            <p>平均被引用数: <strong>${venue.avg_cited_by}</strong></p>
+        </div>
+        ${papers ? `<details>
+            <summary>類似論文サンプル (${venue.sample_papers.length}件)</summary>
+            <ul class="sample-papers">${papers}</ul>
+        </details>` : ''}
+    `;
+    return card;
+}
+
+function renderResults(data) {
+    const summary = document.getElementById('results-summary');
+    const xlabList = document.getElementById('xlab-venue-list');
+    const otherList = document.getElementById('other-venue-list');
+    const xlabSection = document.getElementById('xlab-venues');
+    const otherSection = document.getElementById('other-venues');
+
+    if (data.venues.length === 0) {
+        summary.textContent = '該当する学会・ジャーナルが見つかりませんでした。';
+        xlabList.innerHTML = '';
+        otherList.innerHTML = '';
+        xlabSection.classList.add('hidden');
+        otherSection.classList.add('hidden');
+        results.classList.remove('hidden');
+        return;
+    }
+
+    summary.textContent = `${data.total_works}件の類似論文から${data.venues.length}件の投稿先を発見`;
+    xlabList.innerHTML = '';
+    otherList.innerHTML = '';
+
+    const xlabVenues = data.venues.filter(v => v.xlab);
+    const otherVenues = data.venues.filter(v => !v.xlab);
+
+    let idx = 1;
+    if (xlabVenues.length > 0) {
+        xlabSection.classList.remove('hidden');
+        xlabVenues.forEach(v => {
+            xlabList.appendChild(renderVenueCard(v, idx - 1));
+            idx++;
+        });
+    } else {
+        xlabSection.classList.add('hidden');
+    }
+
+    if (otherVenues.length > 0) {
+        otherSection.classList.remove('hidden');
+        otherVenues.forEach(v => {
+            otherList.appendChild(renderVenueCard(v, idx - 1));
+            idx++;
+        });
+    } else {
+        otherSection.classList.add('hidden');
+    }
+
+    results.classList.remove('hidden');
+}
+</script>
+</body>
+</html>
